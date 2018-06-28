@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<div id="app">
+    <input type="text" v-model="name">
+    <div>
+        <div>
+        </div>
+    </div>
+    <h3>{{ name }}</h3>
+</div>
+<!--实现的mvvm-->
+<script src="mvvm.js"></script>
+<script>
+    // 写法和Vue一样
+    let mvvm = new myVue({ // 构造函数
+        el: '#app', // dom
+        data: {
+            name: 'demo'
+        }
+    });
+</script>
+</body>
+
+</html>
