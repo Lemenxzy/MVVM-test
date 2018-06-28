@@ -12,6 +12,8 @@
         </div>
     </div>
     <h3>{{ name }}</h3>
+    <input type="text" v-model="test">
+    <div>{{test}}</div>
 </div>
 <!--实现的mvvm-->
 <script src="mvvm.js"></script>
@@ -20,7 +22,8 @@
     let mvvm = new myVue({ // 构造函数
         el: '#app', // dom
         data: {
-            name: 'demo'
+            name: 'demo',
+            test: '哈哈哈'
         }
     });
 </script>

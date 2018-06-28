@@ -2,6 +2,7 @@
 function myVue(options = {}) {  // 防止没传，设一个默认值
     this.$options = options; // 配置挂载
     this.$el = document.querySelector(options.el); // 获取dom
+    this.value = ''; //比对val是否触发set
     this._data = options.data;//数据挂载
     this._watcherTpl = {};//watcher池 发布订阅
     this._observer(this._data); //数据劫持
@@ -11,44 +12,30 @@ function myVue(options = {}) {  // 防止没传，设一个默认值
 
 // 重写data 的 get set  更改数据的时候，触发watch 更新视图
 myVue.prototype._observer = function (obj) {
-    var _this = this;
-    for (key in obj){  // 遍历数据
-        //订阅池
-        // _this._watcherTpl.a = [];
-        // _this._watcherTpl.b = [];
-        _this._watcherTpl[key] = {
-            _directives: []
-        };
-        let value = obj[key]; // 获取属`性值
-        let watcherTpl = _this._watcherTpl[key]; // 数据的订阅池
-        Object.defineProperty(_this._data, key, { // 数据劫持
-            configurable: true,  // 可以删除
-            enumerable: true, // 可以遍历
-            get() {
-                console.log(`${key}获取值：${value}`);
-                return value; // 获取值的时候 直接返回
-            },
-            set(newVal) { // 改变值的时候 触发set
-                console.log(`${key}更新：${newVal}`);
-                if (value !== newVal) {
-                    value = newVal;
-                    //_this._watcherTpl.xxx.forEach(item)
-                    //[{update:function(){}}]
-                    watcherTpl._directives.forEach((item) => { // 遍历订阅池
-                        item.update();
-                        // 遍历所有订阅的地方(v-model+v-bind+{{}}) 触发this._compile()中发布的订阅Watcher 更新视图
-                    });
-                }
+    const _this = this;
+    this._data = new Proxy(obj, { // 数据劫持
+        get(target, key, receiver) {
+            return Reflect.get(target, key, receiver); // 获取值的时候 直接返回
+        },
+        set(target, key, newVal) { // 改变值的时候 触发set
+            if (_this.value !== newVal) {
+                _this.value = newVal;
+                //先将数据更新完成后
+                let res =  Reflect.set(target,key,newVal);
+                _this._watcherTpl[key]._directives.forEach((item) => { // 遍历订阅池
+                    item.update();
+                });
+                return res
             }
-        })
-    };
+        }
+    });
 };
 
 // 模板编译
 myVue.prototype._compile = function (el) {
-    var _this = this, nodes = el.children; // 获取app的dom
-    for (var i = 0, len = nodes.length; i < len; i++) { // 遍历dom节点
-        var node = nodes[i];
+    const _this = this, nodes = el.children; // 获取app的dom
+    for (let i = 0, len = nodes.length; i < len; i++) { // 遍历dom节点
+        let node = nodes[i];
         if (node.children.length) {
             _this._compile(node);  // 递归深度遍历 dom树
         }
@@ -57,23 +44,25 @@ myVue.prototype._compile = function (el) {
         if (node.hasAttribute('v-model') && (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA')) {
             node.addEventListener('input', (function (key) {
                 //attVal = data的值
-                var attVal = node.getAttribute('v-model'); // 获取绑定的data
+                const attrVal = node.getAttribute('v-model'); // 获取绑定的data
+                _this.hasDirectives(attrVal);
                 //找到对应的发布订阅池
-                _this._watcherTpl[attVal]._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
+                _this._watcherTpl[attrVal]._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
                     node,
                     _this,
-                    attVal,
+                    attrVal,
                     'value'
                 ));
                 return function () {
                     //触发set nodes[i].value;
-                    _this._data[attVal] = nodes[key].value;  // input值改变的时候 将新值赋给数据 触发set=>set触发watch 更新视图
+                    _this._data[attrVal] = nodes[key].value;  // input值改变的时候 将新值赋给数据 触发set=>set触发watch 更新视图
                 }
             })(i));
         }
 
         if (node.hasAttribute('v-bind')) { // v-bind指令
             var attrVal = node.getAttribute('v-bind'); // 绑定的data
+            _this.hasDirectives(attrVal);
             _this._watcherTpl[attrVal]._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
                 node,
                 _this,
@@ -82,30 +71,38 @@ myVue.prototype._compile = function (el) {
             ))
         }
 
-        var reg = /\{\{\s*([^}]+\S)\s*\}\}/g,
+        const reg = /\{\{\s*([^}]+\S)\s*\}\}/g,
             txt = node.textContent;   // 正则匹配{{}}
         if (reg.test(txt)) {
-            node.textContent = txt.replace(reg, (matched, placeholder) => {
-                // matched匹配的文本节点包括{{}}, placeholder 是{{}}中间的属性名
-                var getName = _this._watcherTpl[placeholder]; // 所有绑定watch的数据
-                if (!getName._directives) { // 没有事件池 创建事件池
-                    getName._directives = [];
-                }
-                getName._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
+            node.textContent = txt.replace(reg, (matched, attVal) => {
+                // matched匹配的文本节点包括{{}}, attVal 是{{}}中间的属性名
+                _this.hasDirectives(attVal);
+                _this._watcherTpl[attVal]._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
                     node,
                     _this,
-                    placeholder,
+                    attVal,
                     'innerHTML'
                 ));
 
-                return _this._data[placeholder];
-                // return placeholder.split('.').reduce((val, key) => {
-                //     return _this._data[key]; // 获取数据的值 触发get 返回当前值
-                // }, _this.$el);
+                return _this._data[attVal];
             });
         }
     }
-}
+};
+
+//工具类判断是否有订阅池
+myVue.prototype.hasDirectives = function (attr) {
+    const _this = this;
+    // 没有事件池 创建事件池
+    if (!_this._watcherTpl[attr]) {
+        _this._watcherTpl[attr] =  {};
+        _this._watcherTpl[attr]._directives = [];
+    } else {
+        if (!_this._watcherTpl[attr]._directives) {
+            _this._watcherTpl[attr]._directives = []
+        }
+    }
+};
 
 // new Watcher() 为this._compile()发布订阅+ 在this._observer()中set(赋值)的时候更新视图
 function Watcher(el, vm, val, attr) {
