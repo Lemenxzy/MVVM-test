@@ -61,7 +61,7 @@ myVue.prototype._compile = function (el) {
         }
 
         if (node.hasAttribute('v-bind')) { // v-bind指令
-            var attrVal = node.getAttribute('v-bind'); // 绑定的data
+            const attrVal = node.getAttribute('v-bind'); // 绑定的data
             _this.hasDirectives(attrVal);
             _this._watcherTpl[attrVal]._directives.push(new Watcher( // 将dom替换成属性的数据并发布订阅 在set的时候更新数据
                 node,
@@ -105,15 +105,27 @@ myVue.prototype.hasDirectives = function (attr) {
 };
 
 // new Watcher() 为this._compile()发布订阅+ 在this._observer()中set(赋值)的时候更新视图
+/**
+ *
+ * @param el 指令对应的DOM元素
+ * @param vm  myVue实例
+ * @param val 唯一的data
+ * @param attr 真实dom节点的attr
+ * @constructor
+ */
+
 function Watcher(el, vm, val, attr) {
-    this.el = el; // 指令对应的DOM元素
-    this.vm = vm; // myVue实例
-    this.val = val; // data
-    this.attr = attr; // 真实dom的属性
-    this.update(); // 填入数组
+    //使用WeakMap对象
+    this.wm = new WeakMap();
+    this.wm.set(el, ()=>{
+        el[attr] = vm._data[val]; // 获取data的最新值 赋值给dom 更新视图
+    });
+    this.wmFn = this.wm.get(el);
+    this.update();
 }
 Watcher.prototype.update = function () {
+    this.wmFn();
     //dom.value = this.mvvm._data[data]
     //调用get
-    this.el[this.attr] = this.vm._data[this.val]; // 获取data的最新值 赋值给dom 更新视图
+    //this.wm.get(element)();s
 };
